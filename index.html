@@ -396,6 +396,8 @@ th.st .ar{font-size:9px;opacity:.9}
   <button class="dbtn" onclick="exportExcel()"><span class="ico">📤</span><span><span class="t">Export เป็น Excel</span><br><span class="d">ดาวน์โหลดข้อมูลปีที่เลือกเป็นไฟล์ .xlsx โครงเดียวกับไฟล์เดิม</span></span></button>
   <button class="dbtn" onclick="document.getElementById('impXlsx').click()"><span class="ico">📥</span><span><span class="t">Import จาก Excel</span><br><span class="d">อ่านไฟล์ Audit 25xx.xlsx (โครงเดิม) — อัพเดทรายที่มีอยู่ / เพิ่มรายใหม่</span></span></button>
   <input type="file" id="impXlsx" accept=".xlsx,.xls" style="display:none">
+  <button class="dbtn" onclick="document.getElementById('impTaxT').click()"><span class="ico">🔢</span><span><span class="t">Import เลขนิติบุคคล (เติมอย่างเดียว)</span><br><span class="d">Export → กรอกคอลัมน์ “เลขนิติบุคคล” ใน Excel → เลือกไฟล์กลับเข้ามา — จับคู่ด้วยชื่อกิจการ เติมเฉพาะเลข ไม่แตะข้อมูลอื่น (เติมให้ทุกปีของกิจการนั้น)</span></span></button>
+  <input type="file" id="impTaxT" accept=".xlsx,.xls,.csv" style="display:none">
   <button class="dbtn" onclick="exportJSON()"><span class="ico">🗄️</span><span><span class="t">สำรองข้อมูล (JSON)</span><br><span class="d">ดาวน์โหลดข้อมูลทั้งหมดทุกปี ไว้ย้ายเครื่อง/กันข้อมูลหาย</span></span></button>
   <button class="dbtn" onclick="document.getElementById('impJson').click()"><span class="ico">♻️</span><span><span class="t">กู้คืนจาก JSON</span><br><span class="d">แทนที่ข้อมูลทั้งหมดด้วยไฟล์สำรอง</span></span></button>
   <input type="file" id="impJson" accept=".json" style="display:none">
@@ -429,6 +431,8 @@ th.st .ar{font-size:9px;opacity:.9}
   </div>
 </div>
 
+<script src="seed-data.js"></script>
+<script src="seed-data.enc.js"></script>
 <script src="sync-token.enc.js"></script>
 <script>
 /* ================= state ================= */
@@ -668,7 +672,7 @@ const PIV_FILTERS=['auditor','contact','payStatus','inSystem','signStatus','mont
 let pivCfg=null,pivSort={ci:1,d:-1},_pivMatrix=null;
 function pivLoad(){
   if(pivCfg)return;
-  try{pivCfg=JSON.parse(localStorage.getItem('wstPivotCfg'));}catch(e){}
+  try{pivCfg=JSON.parse(localStorage.getItem('auditPivotCfg'));}catch(e){}
   if(!pivCfg||!PIV_DIMS[pivCfg.row]||!Array.isArray(pivCfg.vals)||!pivCfg.vals.every(k=>PIV_VALS[k])||!pivCfg.vals.length)
     pivCfg={row:'contact',vals:['count','fee','due'],col:'',filters:{}};
   if(!pivCfg.filters)pivCfg.filters={};
@@ -678,7 +682,7 @@ function pvClearFilters(){pivCfg.filters={};pivSave();renderPivot();}
 function pivFiltered(){
   return _dashRs.filter(r=>PIV_FILTERS.every(fk=>!pivCfg.filters[fk]||PIV_DIMS[fk].get(r)===pivCfg.filters[fk]));
 }
-function pivSave(){localStorage.setItem('wstPivotCfg',JSON.stringify(pivCfg));}
+function pivSave(){localStorage.setItem('auditPivotCfg',JSON.stringify(pivCfg));}
 function pvToggleVal(k){
   const i=pivCfg.vals.indexOf(k);
   if(i>=0){if(pivCfg.vals.length>1)pivCfg.vals.splice(i,1);}
@@ -1234,6 +1238,34 @@ document.getElementById('impXlsx').addEventListener('change',e=>{
   const rd=new FileReader();
   rd.onload=()=>{try{importWB(XLSX.read(rd.result,{type:'array',cellDates:true}),f.name);}catch(err){console.error(err);toast('⚠️ อ่านไฟล์ไม่สำเร็จ');}};
   rd.readAsArrayBuffer(f);e.target.value='';
+});
+/* เติมเลขนิติบุคคลอย่างเดียว จับคู่ด้วยชื่อกิจการ — ปลอดภัย ไม่สร้าง/ไม่ทับ field อื่น */
+function cleanTaxId(v){let s=(v==null?'':String(v)).trim();if(!s)return'';if(/[eE]\+/.test(s)&&isFinite(+s))s=(+s).toFixed(0);s=s.replace(/[^0-9]/g,'');if(s.length===12)s='0'+s;return s;}
+const _normC=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,'');
+const _findCol=(hdr,cands)=>{for(let i=0;i<hdr.length;i++){const h=String(hdr[i]||'').trim().toLowerCase();if(cands.some(c=>h===c||h.includes(c)))return i;}return -1;};
+document.getElementById('impTaxT').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f){return;}e.target.value='';
+  if(typeof XLSX==='undefined'){toast('⚠️ ต้องต่อเน็ตเพื่อโหลดตัวช่วย Excel');return;}
+  const rd=new FileReader();
+  rd.onload=()=>{try{
+    const wb=XLSX.read(new Uint8Array(rd.result),{type:'array'});
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+    if(!aoa.length)throw 0;
+    let hi=aoa.findIndex(row=>row&&row.some(c=>/กิจการ|ชื่อ/.test(String(c||''))));if(hi<0)hi=0;
+    const hdr=aoa[hi];
+    const ci=_findCol(hdr,['ชื่อกิจการ','กิจการ','ชื่อ','company','name']);
+    const ti=_findCol(hdr,['เลขนิติบุคคล','เลขทะเบียนนิติบุคคล','เลขประจำตัวผู้เสียภาษี','เลขผู้เสียภาษี','เลขภาษี','taxid','tax id']);
+    if(ci<0||ti<0){toast('⚠️ ไม่พบคอลัมน์ "กิจการ" หรือ "เลขนิติบุคคล" ในไฟล์');return;}
+    const map={};aoa.slice(hi+1).forEach(row=>{if(!row)return;const nm=_normC(row[ci]),tx=cleanTaxId(row[ti]);if(nm&&tx&&!map[nm])map[nm]=tx;});
+    let upd=0;
+    live().forEach(r=>{const tx=map[_normC(r.company)];if(tx&&r.taxId!==tx){r.taxId=tx;r.updatedAt=Date.now();upd++;}});
+    const matched=new Set(live().map(r=>_normC(r.company)));
+    const miss=Object.keys(map).filter(k=>!matched.has(k)).length;
+    if(!upd){toast('ℹ️ ไม่มีเลขนิติบุคคลใหม่ให้เติม'+(miss?' ('+miss+' กิจการไม่ตรงกับในระบบ)':''));return;}
+    save();renderList();renderDash();
+    toast('🔢 เติมเลขนิติบุคคลแล้ว '+upd+' รายการ'+(miss?' · ข้าม '+miss+' กิจการ (ชื่อไม่ตรง)':''));
+  }catch(err){console.error(err);toast('⚠️ อ่านไฟล์ไม่สำเร็จ — ต้องเป็น Excel/CSV ที่ export จากแอปนี้');}};
+  rd.readAsArrayBuffer(f);
 });
 function importWB(wb,fname){
   let sheet=wb.SheetNames.find(n=>/^25\d\d$/.test(n.trim()))||wb.SheetNames[0];
