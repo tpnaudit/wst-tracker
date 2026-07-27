@@ -471,8 +471,26 @@ const THM=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.
 const DOCS={hard:'ส่ง Hard',elRep:'EL & Rep',confirm:'Confirm',whtCert:'ใบหักฯ',shLetter:'ยืนยัน ผถห.'};
 const fmtB=n=>'฿'+(Math.round(n)).toLocaleString('th-TH');
 const fmtN=n=>n.toLocaleString('th-TH');
-function fmtD(s){if(!s)return'-';const[y,m,d]=s.split('-').map(Number);return d+' '+THM[m-1]+' '+String(y).slice(-2);}
+function fmtD(s){if(!s)return'-';const iso=parseDateBE(s);if(!iso)return'-';const[y,m,d]=iso.split('-').map(Number);return d+' '+THM[m-1]+' '+String(y).slice(-2);}
 function todayBE(){const d=new Date();return (d.getFullYear()+543)+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+const beY=y=>(y>=1990&&y<2490)?y+543:y; // ปี ค.ศ. → พ.ศ.
+/* แปลงวันที่รูปแบบใดๆ (ISO พ.ศ./ค.ศ., d/m/y, m/d/y, Date) → 'พ.ศ.-MM-DD' — แยก D/M vs M/D ด้วยเลข >12 */
+function parseDateBE(v){
+  if(v==null||v==='')return'';
+  if(v instanceof Date)return beY(v.getFullYear())+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m)return beY(+m[1])+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){let a=+m[1],b=+m[2],y=+m[3],day,mon;
+    if(a>12){day=a;mon=b;}else if(b>12){mon=a;day=b;}else{day=a;mon=b;} // >12 คือวันแน่ๆ, กำกวมให้เป็น D/M (ไทย)
+    if(mon<1||mon>12||day<1||day>31)return'';
+    if(y<100)y+=2500; y=beY(y);
+    return y+'-'+String(mon).padStart(2,'0')+'-'+String(day).padStart(2,'0');}
+  return '';
+}
+/* Export/แสดงเป็น DD/MM/พ.ศ. เช่น 31/12/2569 */
+function fmtDMY(v){const iso=parseDateBE(v);if(!iso)return'';const[y,mo,d]=iso.split('-');return d+'/'+mo+'/'+y;}
 const net=r=>(r.fee||0)+(r.incentive||0)-(r.wht||0);
 /* สุทธิของเรา = ส่วนของ Poom (กรณีส่งต่อ) หรือรับสุทธิ แล้วหักค่าจ้างผู้ช่วย */
 const poomNet=r=>((r.poomShare||r.auditorShare)?(r.poomShare||0):net(r))-(r.assistantFee||0)-(r.commission||0);
@@ -1024,9 +1042,12 @@ function delRec(id){const r=findRec(id);if(!r)return;if(!confirm('ลบ "'+r.co
 /* ================= form ================= */
 const F=id=>document.getElementById(id);
 ['f_fee','f_incentive','f_wht','f_assistantFee'].forEach(id=>F(id).addEventListener('input',updNet));
-F('f_fee').addEventListener('input',()=>{if(!whtTouched)F('f_wht').value=Math.round((+F('f_fee').value||0)*0.03*100)/100;if(!commManual)commFromPct();updNet();});
+/* หัก ณ ที่จ่าย 3% — คิดให้เฉพาะรายที่ "เข้าระบบ (ยื่นภาษี)" เท่านั้น ถ้าไม่เข้าระบบ = 0 */
+function autoWht(){F('f_wht').value=(F('f_inSystem').checked&&(+F('f_fee').value||0)>0)?Math.round((+F('f_fee').value||0)*0.03*100)/100:0;}
+F('f_fee').addEventListener('input',()=>{if(!whtTouched)autoWht();if(!commManual)commFromPct();updNet();});
 let whtTouched=false,commManual=false;
 F('f_wht').addEventListener('input',()=>{whtTouched=true;updNet();});
+F('f_inSystem').addEventListener('change',()=>{if(!whtTouched)autoWht();updNet();});
 /* ค่า ref ลูกค้า: กรอก % → คิดจากราคาให้, พิมพ์จำนวนเอง → โหมด manual */
 function commFromPct(){const pct=+F('f_commPct').value||0;if(pct>0)F('f_commAmt').value=Math.round((+F('f_fee').value||0)*pct/100*100)/100;}
 F('f_commPct').addEventListener('input',()=>{commManual=false;commFromPct();updNet();});
@@ -1091,7 +1112,7 @@ function prefillFromSel(){
   if(id)prefillFromId(id);
 }
 function shiftYearBE(d){ // "2568-12-31" → "2569-12-31"
-  const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const m=parseDateBE(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m)return '';
   let[,y,mo,dd]=m;
   if(mo==='02'&&dd==='29')dd='28';
@@ -1113,7 +1134,7 @@ function prefillFromId(id){
   F('f_auditor').value=r.auditor||'Poom';F('f_contact').value=r.contact||'';
   F('f_month').value=r.month||'';F('f_fyEnd').value=shiftYearBE(r.fyEnd);
   F('f_revenue').value=r.revenue||'';F('f_inSystem').checked=!!r.inSystem;
-  F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;F('f_wht').value=r.wht||0;whtTouched=true;
+  F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;whtTouched=false;autoWht(); // คิด WHT ใหม่ตามราคา+สถานะเข้าระบบที่ยกมา
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
   F('f_commPct').value=0;F('f_commAmt').value=0;commManual=false; // ref ให้เฉพาะปีแรก — ต่อปีถัดไปรีเซ็ต
   F('f_poomShare').value=r.poomShare||0;F('f_auditorShare').value=r.auditorShare||0;
@@ -1142,15 +1163,18 @@ function editRec(id){
   document.getElementById('formTitle').textContent='แก้ไข: '+r.company;
   F('f_id').value=r.id;F('f_company').value=r.company;F('f_taxId').value=r.taxId||'';F('f_year').value=r.year;
   F('f_auditor').value=r.auditor||'Poom';F('f_contact').value=r.contact||'';F('f_month').value=r.month||'';
-  F('f_fyEnd').value=r.fyEnd||'';F('f_dateNotified').value=r.dateNotified||'';F('f_dateSigned').value=r.dateSigned||'';
+  F('f_fyEnd').value=parseDateBE(r.fyEnd);F('f_dateNotified').value=parseDateBE(r.dateNotified);F('f_dateSigned').value=parseDateBE(r.dateSigned);
   F('f_opinion').value=r.opinion||'';F('f_revenue').value=r.revenue||'';F('f_inSystem').checked=!!r.inSystem;F('f_signedFlag').checked=!!r.signedFlag;
   F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;F('f_wht').value=r.wht||0;
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
   F('f_commPct').value=r.commissionPct||0;F('f_commAmt').value=r.commission||0;commManual=!(r.commissionPct>0)&&(r.commission>0);
   F('f_poomShare').value=r.poomShare||0;F('f_auditorShare').value=r.auditorShare||0;
-  F('f_paid').checked=!!r.paid;F('f_datePaid').value=r.datePaid||'';
+  F('f_paid').checked=!!r.paid;F('f_datePaid').value=parseDateBE(r.datePaid);
   Object.keys(DOCS).forEach(k=>F('f_doc_'+k).value=docVal(r,k));
-  F('f_note').value=r.note||'';whtTouched=true;
+  F('f_note').value=r.note||'';
+  /* WHT: ถ้ายังเป็น 0/ตรงกับ 3%-ที่ควรเป็น → ให้คิดอัตโนมัติตามสถานะเข้าระบบ, ถ้าใส่ค่าเองไว้แล้ว → คงไว้ */
+  {const exp=(r.inSystem&&(+r.fee||0)>0)?Math.round((+r.fee||0)*0.03*100)/100:0;
+   if(!(+r.wht)||Math.abs((+r.wht||0)-exp)<0.5){F('f_wht').value=exp;whtTouched=false;}else{F('f_wht').value=r.wht;whtTouched=true;}}
   F('splitRow').style.display=(r.auditor&&r.auditor.toLowerCase()!=='poom')?'grid':'none';
   updNet();showPage('pg-form');
 }
@@ -1204,8 +1228,8 @@ function exportExcel(){
     'เข้าระบบ','รายได้ของงบ','ราคา','Incentive','หัก ณ ที่จ่าย','จ้างผู้ช่วย','ชื่อผู้ช่วย','รับสุทธิ','รับเงินแล้ว','วันที่รับเงิน',
     'ค้างรับ','Poom รับ','ผู้สอบอื่นรับ','ส่ง Hard','ได้รับ EL and Rep Letter','ได้รับ confirm signed','ได้รับใบหัก ณ ที่จ่าย','ได้รับหนังสือยืนยันผถหไทย','หมายเหตุ','ค่า ref ลูกค้า'];
   const dv=(r,k)=>({yes:'Yes',no:'No',na:''})[docVal(r,k)];
-  const rows=rs.map((r,i)=>[i+1,r.dateNotified,r.dateSigned||(r.signedFlag?'Y':''),r.opinion,r.month||'',r.taxId,r.company,r.auditor,r.contact,r.fyEnd,
-    yn(r.inSystem),r.revenue||'',r.fee||0,r.incentive||0,r.wht||0,r.assistantFee||0,r.assistantName,0,yn(r.paid),r.datePaid,
+  const rows=rs.map((r,i)=>[i+1,fmtDMY(r.dateNotified),fmtDMY(r.dateSigned)||(r.signedFlag?'Y':''),r.opinion,r.month||'',r.taxId,r.company,r.auditor,r.contact,fmtDMY(r.fyEnd),
+    yn(r.inSystem),r.revenue||'',r.fee||0,r.incentive||0,r.wht||0,r.assistantFee||0,r.assistantName,0,yn(r.paid),fmtDMY(r.datePaid),
     0,r.poomShare||'',r.auditorShare||'',dv(r,'hard'),dv(r,'elRep'),dv(r,'confirm'),dv(r,'whtCert'),dv(r,'shLetter'),r.note,r.commission||0]);
   const totalRow=Array(hdr.length).fill('');totalRow[6]='รวม '+rs.length+' งบ';
   const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,totalRow]);
@@ -1294,10 +1318,7 @@ function importWB(wb,fname){
   const hdr=aoa[hi].map(h=>String(h||'').replace(/\s+/g,''));
   const ix=name=>hdr.findIndex(h=>h===name.replace(/\s+/g,''));
   const gx=(row,...names)=>{for(const n of names){const i=ix(n);if(i>=0&&row[i]!=null&&row[i]!=='')return row[i];}return '';};
-  const beY=y=>(y>=1990&&y<2490)?y+543:y; // ปี ค.ศ. → พ.ศ.
-  const dt=v=>{if(!v)return'';if(v instanceof Date)return beY(v.getFullYear())+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
-    const m=String(v).match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return beY(+m[1])+'-'+m[2]+'-'+m[3];
-    const m2=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(m2){let y=+m2[3];if(y<100)y+=2500;return beY(y)+'-'+m2[2].padStart(2,'0')+'-'+m2[1].padStart(2,'0');}return'';};
+  const dt=parseDateBE; // ตัวแยกวันที่รวม (ISO พ.ศ./ค.ศ., d/m/y, m/d/y โดยแยกด้วยเลข >12)
   const num=v=>{const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;};
   const yes=v=>/^(yes|y|ใช่)$/i.test(String(v||'').trim());
   let added=0,updated=0;
@@ -1308,7 +1329,7 @@ function importWB(wb,fname){
     let rec=records.find(x=>x.year===yr&&((taxId&&x.taxId===taxId)||x.company===company));
     const isNew=!rec;
     if(isNew){rec={id:'i'+yr+'-'+r+'-'+Date.now()%100000};records.push(rec);}
-    const unpaidV=gx(row,'ยังไม่ได้รับเงิน');const dp=dt(gx(row,'วันที่รับเงิน'));const fee=num(gx(row,'ราคา'));
+    const unpaidV=gx(row,'ยังไม่ได้รับเงิน');const dp=dt(gx(row,'วันที่รับเงิน'));const fee=num(gx(row,'ราคา'));const inSys=yes(gx(row,'เข้าระบบ'));
     Object.assign(rec,{
       year:yr,company,taxId:taxId||rec.taxId||'',
       auditor:String(gx(row,'Auditor')||'Poom').trim()||'Poom',
@@ -1316,8 +1337,8 @@ function importWB(wb,fname){
       dateNotified:dt(gx(row,'วันที่แจ้ง')),dateSigned:dt(gx(row,'วันที่ลงรายชื่อ')),
       signedFlag:!dt(gx(row,'วันที่ลงรายชื่อ'))&&/^y(es)?$/i.test(String(gx(row,'วันที่ลงรายชื่อ')||'').trim()),
       fyEnd:dt(gx(row,'งบปี')),month:Math.round(num(gx(row,'Month')))||null,
-      inSystem:yes(gx(row,'เข้าระบบ')),fee,incentive:num(gx(row,'Incentive')),
-      wht:num(gx(row,'หักณที่จ่าย','หัก ณ ที่จ่าย')),assistantFee:num(gx(row,'จ้างผู้ช่วย')),
+      inSystem:inSys,fee,incentive:num(gx(row,'Incentive')),
+      wht:num(gx(row,'หักณที่จ่าย','หัก ณ ที่จ่าย'))||(inSys&&fee>0?Math.round(fee*0.03*100)/100:0),assistantFee:num(gx(row,'จ้างผู้ช่วย')),
       assistantName:String(gx(row,'ชื่อผู้ช่วย')||'').trim(),
       paid:!!dp||(unpaidV!==''&&num(unpaidV)===0&&fee>0),datePaid:dp,
       docs:(()=>{const tri=v=>{const s=String(v||'').trim();if(!s)return null;return /^(yes|y|ใช่)$/i.test(s)?true:false;};
