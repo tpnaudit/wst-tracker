@@ -482,8 +482,11 @@ function parseDateBE(v){
   let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if(m)return beY(+m[1])+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
   m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-  if(m){let a=+m[1],b=+m[2],y=+m[3],day,mon;
-    if(a>12){day=a;mon=b;}else if(b>12){mon=a;day=b;}else{day=a;mon=b;} // >12 คือวันแน่ๆ, กำกวมให้เป็น D/M (ไทย)
+  if(m){let a=+m[1],b=+m[2],y=+m[3],day,mon;const twoDig=m[3].length<=2;
+    if(a>12){day=a;mon=b;}          // a>12 → a คือวัน (D/M)
+    else if(b>12){mon=a;day=b;}     // b>12 → b คือวัน (M/D)
+    else if(twoDig){mon=a;day=b;}   // ปี 2 หลัก = ฟอร์แมตเก่า US → M/D
+    else{day=a;mon=b;}              // ปี 4 หลัก = ฟอร์แมตใหม่ไทย → D/M
     if(mon<1||mon>12||day<1||day>31)return'';
     if(y<100)y+=2500; y=beY(y);
     return y+'-'+String(mon).padStart(2,'0')+'-'+String(day).padStart(2,'0');}
@@ -926,7 +929,12 @@ function fillFilterOpts(){
 }
 function filtered(){
   const p=filterVals();
-  return yearRecs().filter(r=>passF(r,p,null)).sort((a,b)=>(b.dateNotified||'').localeCompare(a.dateNotified||''));
+  /* เรียงตามวันที่แจ้ง เก่า→ใหม่ (งบที่แจ้งก่อนอยู่บนสุด) · normalize วันที่ก่อนเทียบ · ไม่มีวันที่ไปท้ายสุด · เท่ากันคงลำดับที่แอด */
+  return yearRecs().filter(r=>passF(r,p,null)).sort((a,b)=>{
+    const da=parseDateBE(a.dateNotified),db=parseDateBE(b.dateNotified);
+    if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;
+    return da.localeCompare(db);
+  });
 }
 function renderList(){
   fillFilterOpts();
