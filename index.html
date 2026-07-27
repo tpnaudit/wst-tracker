@@ -553,6 +553,8 @@ function renderDash(){
   const assistTot=rs.reduce((s,r)=>s+(r.assistantFee||0)+(r.auditorShare||0),0);
   const poomTot=rs.reduce((s,r)=>s+poomNet(r),0);
   const netTot=rs.reduce((s,r)=>s+net(r),0);
+  const inTFAC=rs.filter(r=>parseDateBE(r.dateNotified));   // เข้าระบบ TFAC = มีวันแจ้ง
+  const inTFACSigned=inTFAC.filter(isSigned);
   document.getElementById('kpis').innerHTML=`
     <div class="kpi"><div class="lb">งบทั้งหมด</div><div class="v">${fmtN(rs.length)}</div><div class="sub">ปี ${curYear}</div></div>
     <div class="kpi gd"><div class="lb">ลงชื่อแล้ว</div><div class="v">${fmtN(signed.length)}</div><div class="sub">${pct}% ของทั้งหมด</div></div>
@@ -563,7 +565,9 @@ function renderDash(){
     <div class="kpi am"><div class="lb">จ่ายผู้ช่วย+ส่วนแบ่ง</div><div class="v">${fmtB(assistTot)}</div><div class="sub">ค่าผู้ช่วย + ผู้สอบอื่น</div></div>
     <div class="kpi bl"><div class="lb">สุทธิของเรา</div><div class="v">${fmtB(poomTot)}</div><div class="sub">ทั้งปี หลังหักผู้ช่วย/ส่วนแบ่ง</div></div>
     <div class="kpi gd"><div class="lb">สุทธิรับแล้ว</div><div class="v">${fmtB(rs.filter(r=>r.paid).reduce((s,r)=>s+poomNet(r),0))}</div><div class="sub">สุทธิของเรา เฉพาะรับเงินแล้ว</div></div>
-    <div class="kpi bl"><div class="lb">เฉลี่ยรับสุทธิ/งบ</div><div class="v">${fmtB(rs.length?netTot/rs.length:0)}</div><div class="sub">รับสุทธิรวม ÷ ${fmtN(rs.length)} งบ</div></div>`;
+    <div class="kpi bl"><div class="lb">เฉลี่ยรับสุทธิ/งบ</div><div class="v">${fmtB(rs.length?netTot/rs.length:0)}</div><div class="sub">รับสุทธิรวม ÷ ${fmtN(rs.length)} งบ</div></div>
+    <div class="kpi"><div class="lb">เข้าระบบ TFAC</div><div class="v">${fmtN(inTFAC.length)}</div><div class="sub">มีวันแจ้งแล้ว · ${rs.length?Math.round(inTFAC.length/rs.length*100):0}% ของทั้งหมด</div></div>
+    <div class="kpi gd"><div class="lb">TFAC · ลงนามแล้ว</div><div class="v">${fmtN(inTFACSigned.length)}</div><div class="sub">${inTFAC.length?Math.round(inTFACSigned.length/inTFAC.length*100):0}% ของที่เข้า TFAC</div></div>`;
 
   /* month chart */
   const sM=Array(12).fill(0),nM=Array(12).fill(0);
