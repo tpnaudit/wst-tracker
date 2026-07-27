@@ -107,6 +107,10 @@ td.r,th.r{text-align:right}
 label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px}
 .frm input,.frm select,.frm textarea{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fff}
 .frm input:focus,.frm select:focus{outline:none;border-color:var(--navy2)}
+.dwrap{display:flex;gap:6px;align-items:stretch;position:relative}
+.dwrap>input[type=text]{flex:1;min-width:0}
+.dwrap .dcal{flex:0 0 auto;width:42px;border:1.5px solid var(--line);background:#f7f9fb;border-radius:10px;font-size:17px;line-height:1;cursor:pointer;padding:0}
+.dwrap .dhidden{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;padding:0;border:0;pointer-events:none}
 .fsec{font-size:13px;font-weight:800;color:var(--teal);margin:16px 0 8px;padding-top:10px;border-top:1px dashed var(--line)}
 .ckrow{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 @media(min-width:760px){.ckrow{grid-template-columns:repeat(3,1fr)}}
@@ -325,11 +329,11 @@ th.st .ar{font-size:9px;opacity:.9}
       <div><label>Auditor (ผู้ลงชื่อ)</label><input id="f_auditor" list="dlAuditor" placeholder="Poom"></div>
       <div><label>Contact ลูกค้า</label><input id="f_contact" list="dlContact"></div>
       <div><label>เดือน (รอบงาน)</label><select id="f_month"></select></div>
-      <div><label>งบปีสิ้นสุด</label><input id="f_fyEnd" type="date"></div>
+      <div><label>งบปีสิ้นสุด</label><div class="dwrap"><input id="f_fyEnd" type="text" inputmode="numeric" placeholder="วว/ดด/ปปปป" autocomplete="off"><button type="button" class="dcal" onclick="openPick('f_fyEnd')" tabindex="-1">📅</button><input id="f_fyEnd_p" type="date" class="dhidden" tabindex="-1"></div></div>
     </div>
     <div class="frow">
-      <div><label>วันที่แจ้ง</label><input id="f_dateNotified" type="date"></div>
-      <div><label>วันที่ลงรายชื่อ</label><input id="f_dateSigned" type="date"></div>
+      <div><label>วันที่แจ้ง</label><div class="dwrap"><input id="f_dateNotified" type="text" inputmode="numeric" placeholder="วว/ดด/ปปปป" autocomplete="off"><button type="button" class="dcal" onclick="openPick('f_dateNotified')" tabindex="-1">📅</button><input id="f_dateNotified_p" type="date" class="dhidden" tabindex="-1"></div></div>
+      <div><label>วันที่ลงรายชื่อ</label><div class="dwrap"><input id="f_dateSigned" type="text" inputmode="numeric" placeholder="วว/ดด/ปปปป" autocomplete="off"><button type="button" class="dcal" onclick="openPick('f_dateSigned')" tabindex="-1">📅</button><input id="f_dateSigned_p" type="date" class="dhidden" tabindex="-1"></div></div>
       <div><label>ความเห็นผู้สอบ</label><select id="f_opinion">
         <option value="">ไม่มีเงื่อนไข (ปกติ)</option><option>มีเงื่อนไข</option><option>ไม่แสดงความเห็น</option><option>งบไม่ถูกต้อง</option>
       </select></div>
@@ -368,7 +372,7 @@ th.st .ar{font-size:9px;opacity:.9}
     </div>
     <div class="frow half">
       <div class="ck"><input type="checkbox" id="f_paid"><span>รับเงินแล้ว</span></div>
-      <div><label>วันที่รับเงิน</label><input id="f_datePaid" type="date"></div>
+      <div><label>วันที่รับเงิน</label><div class="dwrap"><input id="f_datePaid" type="text" inputmode="numeric" placeholder="วว/ดด/ปปปป" autocomplete="off"><button type="button" class="dcal" onclick="openPick('f_datePaid')" tabindex="-1">📅</button><input id="f_datePaid_p" type="date" class="dhidden" tabindex="-1"></div></div>
     </div>
 
     <div class="fsec">📄 ติดตามเอกสาร <span style="font-weight:400;color:var(--muted)">(ค้าง / ได้แล้ว / ไม่ต้องใช้)</span></div>
@@ -406,6 +410,7 @@ th.st .ar{font-size:9px;opacity:.9}
   <button class="dbtn" onclick="exportJSON()"><span class="ico">🗄️</span><span><span class="t">สำรองข้อมูล (JSON)</span><br><span class="d">ดาวน์โหลดข้อมูลทั้งหมดทุกปี ไว้ย้ายเครื่อง/กันข้อมูลหาย</span></span></button>
   <button class="dbtn" onclick="document.getElementById('impJson').click()"><span class="ico">♻️</span><span><span class="t">กู้คืนจาก JSON</span><br><span class="d">แทนที่ข้อมูลทั้งหมดด้วยไฟล์สำรอง</span></span></button>
   <input type="file" id="impJson" accept=".json" style="display:none">
+  <button class="dbtn" onclick="cleanupBomJune()"><span class="ico">🔧</span><span><span class="t">จัดระเบียบ: รวมชื่อบอม + ปิดงาน P'Bom/P'June</span><br><span class="d">รวม “พี่บอม/บอม” → P'Bom และตั้งทุกงบของ P'Bom & P'June เป็น “รับเงินแล้ว + ลงชื่อแล้ว” (เหลือแต่ Poom ที่ยังค้าง) — แนะนำสำรอง JSON ก่อน</span></span></button>
   <button class="dbtn" onclick="resetAll()"><span class="ico">🗑️</span><span><span class="t" style="color:var(--red)">ล้างข้อมูลทั้งหมด</span><br><span class="d">ลบทุกรายการและกลับไปใช้ข้อมูลตั้งต้นจาก Excel</span></span></button>
   <div class="lsum" id="dataStat"></div>
 
@@ -547,6 +552,7 @@ function renderDash(){
   const pct=rs.length?Math.round(signed.length/rs.length*100):0;
   const assistTot=rs.reduce((s,r)=>s+(r.assistantFee||0)+(r.auditorShare||0),0);
   const poomTot=rs.reduce((s,r)=>s+poomNet(r),0);
+  const netTot=rs.reduce((s,r)=>s+net(r),0);
   document.getElementById('kpis').innerHTML=`
     <div class="kpi"><div class="lb">งบทั้งหมด</div><div class="v">${fmtN(rs.length)}</div><div class="sub">ปี ${curYear}</div></div>
     <div class="kpi gd"><div class="lb">ลงชื่อแล้ว</div><div class="v">${fmtN(signed.length)}</div><div class="sub">${pct}% ของทั้งหมด</div></div>
@@ -556,13 +562,15 @@ function renderDash(){
     <div class="kpi rd"><div class="lb">ค้างรับเงิน</div><div class="v">${fmtB(unpaidAmt)}</div><div class="sub">${fmtN(rs.filter(r=>!r.paid).length)} งบ</div></div>
     <div class="kpi am"><div class="lb">จ่ายผู้ช่วย+ส่วนแบ่ง</div><div class="v">${fmtB(assistTot)}</div><div class="sub">ค่าผู้ช่วย + ผู้สอบอื่น</div></div>
     <div class="kpi bl"><div class="lb">สุทธิของเรา</div><div class="v">${fmtB(poomTot)}</div><div class="sub">ทั้งปี หลังหักผู้ช่วย/ส่วนแบ่ง</div></div>
-    <div class="kpi gd"><div class="lb">สุทธิรับแล้ว</div><div class="v">${fmtB(rs.filter(r=>r.paid).reduce((s,r)=>s+poomNet(r),0))}</div><div class="sub">สุทธิของเรา เฉพาะรับเงินแล้ว</div></div>`;
+    <div class="kpi gd"><div class="lb">สุทธิรับแล้ว</div><div class="v">${fmtB(rs.filter(r=>r.paid).reduce((s,r)=>s+poomNet(r),0))}</div><div class="sub">สุทธิของเรา เฉพาะรับเงินแล้ว</div></div>
+    <div class="kpi bl"><div class="lb">เฉลี่ยรับสุทธิ/งบ</div><div class="v">${fmtB(rs.length?netTot/rs.length:0)}</div><div class="sub">รับสุทธิรวม ÷ ${fmtN(rs.length)} งบ</div></div>`;
 
   /* month chart */
   const sM=Array(12).fill(0),nM=Array(12).fill(0);
   rs.forEach(r=>{
-    if(r.dateSigned){const m=+r.dateSigned.split('-')[1];if(m>=1&&m<=12)sM[m-1]++;}
-    if(r.dateNotified){const m=+r.dateNotified.split('-')[1];if(m>=1&&m<=12)nM[m-1]++;}
+    const ds=parseDateBE(r.dateSigned),dn=parseDateBE(r.dateNotified);
+    if(ds){const m=+ds.split('-')[1];if(m>=1&&m<=12)sM[m-1]++;}
+    if(dn){const m=+dn.split('-')[1];if(m>=1&&m<=12)nM[m-1]++;}
   });
   mkChart('chMonth',{type:'bar',data:{labels:THM,datasets:[
     {label:'ลงชื่อแล้ว',data:sM,backgroundColor:'#0e9f8a',borderRadius:5},
@@ -970,6 +978,7 @@ function renderList(){
         ${!isSigned(r)?`<button class="a-sign" onclick="quickSign('${r.id}')">✍️ ลงชื่อวันนี้</button>`:''}
         ${!r.paid?`<button class="a-paid" onclick="quickPaid('${r.id}')">💰 รับเงินแล้ว</button>`:''}
         <button class="a-edit" onclick="editRec('${r.id}')">✏️ แก้ไข</button>
+        <button class="a-edit" style="background:#e0f2fe;color:#075985" onclick="dupNextYear('${r.id}')">⧉ ทำซ้ำปีถัดไป</button>
         <button class="a-del" onclick="delRec('${r.id}')">🗑</button>
       </div>`}</div>`;
   }).join('')||'<div class="card" style="text-align:center;color:var(--muted)">ไม่พบรายการ</div>';
@@ -1049,6 +1058,12 @@ function delRec(id){const r=findRec(id);if(!r)return;if(!confirm('ลบ "'+r.co
 
 /* ================= form ================= */
 const F=id=>document.getElementById(id);
+/* ===== ช่องวันที่: พิมพ์ได้ (วว/ดด/ปปปป พ.ศ.) + ปุ่มปฏิทินที่แปลง ค.ศ.↔พ.ศ. (กันปีเพี้ยนบนมือถือ) ===== */
+const DFIELDS=['f_fyEnd','f_dateNotified','f_dateSigned','f_datePaid'];
+function setDF(id,iso){const v=parseDateBE(iso);F(id).value=v?fmtDMY(v):'';}
+function getDF(id){return parseDateBE(F(id).value);}
+function openPick(id){const p=F(id+'_p');if(!p)return;const iso=getDF(id);p.value=iso?((+iso.slice(0,4)-543)+iso.slice(4)):'';try{if(p.showPicker)p.showPicker();else{p.focus();p.click();}}catch(e){p.focus();}}
+DFIELDS.forEach(id=>{const p=F(id+'_p');if(p)p.addEventListener('change',()=>{if(p.value){const[y,mo,d]=p.value.split('-');F(id).value=d+'/'+mo+'/'+(+y+543);}});});
 ['f_fee','f_incentive','f_wht','f_assistantFee'].forEach(id=>F(id).addEventListener('input',updNet));
 /* หัก ณ ที่จ่าย 3% — คิดให้เฉพาะรายที่ "เข้าระบบ (ยื่นภาษี)" เท่านั้น ถ้าไม่เข้าระบบ = 0 */
 function autoWht(){F('f_wht').value=(F('f_inSystem').checked&&(+F('f_fee').value||0)>0)?Math.round((+F('f_fee').value||0)*0.03*100)/100:0;}
@@ -1061,7 +1076,7 @@ function commFromPct(){const pct=+F('f_commPct').value||0;if(pct>0)F('f_commAmt'
 F('f_commPct').addEventListener('input',()=>{commManual=false;commFromPct();updNet();});
 F('f_commAmt').addEventListener('input',()=>{commManual=true;F('f_commPct').value=0;updNet();});
 F('f_auditor').addEventListener('input',()=>{F('splitRow').style.display=(F('f_auditor').value.trim()&&F('f_auditor').value.trim().toLowerCase()!=='poom')?'grid':'none';});
-F('f_paid').addEventListener('change',()=>{if(F('f_paid').checked&&!F('f_datePaid').value)F('f_datePaid').value=todayBE();});
+F('f_paid').addEventListener('change',()=>{if(F('f_paid').checked&&!F('f_datePaid').value)setDF('f_datePaid',todayBE());});
 function updNet(){const n=(+F('f_fee').value||0)+(+F('f_incentive').value||0)-(+F('f_wht').value||0);
   const assist=+F('f_assistantFee').value||0,comm=+F('f_commAmt').value||0;
   let t='รับสุทธิ: '+fmtB(n);
@@ -1140,7 +1155,7 @@ function prefillFromId(id){
   F('f_company').value=r.company;F('f_taxId').value=r.taxId||'';
   F('f_year').value=r.year+1;
   F('f_auditor').value=r.auditor||'Poom';F('f_contact').value=r.contact||'';
-  F('f_month').value=r.month||'';F('f_fyEnd').value=shiftYearBE(r.fyEnd);
+  F('f_month').value=r.month||'';setDF('f_fyEnd',shiftYearBE(r.fyEnd));
   F('f_revenue').value=r.revenue||'';F('f_inSystem').checked=!!r.inSystem;
   F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;whtTouched=false;autoWht(); // คิด WHT ใหม่ตามราคา+สถานะเข้าระบบที่ยกมา
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
@@ -1153,6 +1168,29 @@ function prefillFromId(id){
   updNet();
   toast('📎 ดึงข้อมูล "'+r.company+'" มาแล้ว — ตั้งเป็นปี '+(r.year+1));
 }
+/* ทำซ้ำงบเดิมเป็นปีถัดไป (ลูกค้าจ้างหลายปี/ทำย้อนหลัง) — เปิดฟอร์มพร้อมข้อมูลเดิม เปลี่ยนปี+1 แก้ปีได้ */
+function dupNextYear(id){prefillFromId(id);showPage('pg-form');}
+/* จัดระเบียบครั้งเดียว: รวมชื่อบอม → P'Bom, และปิดงาน (รับเงิน+ลงชื่อ) ทุกงบของ P'Bom/P'June */
+function cleanupBomJune(){
+  if(!confirm("จัดระเบียบข้อมูล:\n• รวมชื่อ \"พี่บอม/บอม\" → P'Bom\n• ตั้งทุกงบของ P'Bom และ P'June เป็น รับเงินแล้ว + ลงชื่อแล้ว\n\nแนะนำ Export JSON สำรองก่อน — กด OK เพื่อดำเนินการ")) return;
+  const isBom=n=>/บอม|bom/i.test(String(n||'')),isBJ=n=>/บอม|bom|june|จูน/i.test(String(n||''));
+  const today=todayBE();let renamed=0,marked=0;
+  live().forEach(r=>{
+    let ch=false;
+    if(isBom(r.auditor)&&r.auditor!=="P'Bom"){r.auditor="P'Bom";renamed++;ch=true;}
+    if(isBom(r.contact)&&r.contact!=="P'Bom"){r.contact="P'Bom";ch=true;}
+    if(isBJ(r.auditor)){
+      let m=false;
+      if(!r.paid){r.paid=true;if(!r.datePaid)r.datePaid=today;m=true;}
+      if(!isSigned(r)){r.dateSigned=r.dateSigned||today;r.signedFlag=true;m=true;}
+      if(m){marked++;ch=true;}
+    }
+    if(ch)r.updatedAt=Date.now();
+  });
+  mergeListsFromRecords();
+  save();renderYearSel();renderList();renderDash();renderDataStat();
+  toast('🔧 รวมชื่อ '+renamed+' รายการ · ปิดงาน P\'Bom/P\'June '+marked+' งบ');
+}
 function resetForm(){
   F('f_id').value='';document.getElementById('formTitle').textContent='เพิ่มงบใหม่';
   ['f_company','f_taxId','f_auditor','f_contact','f_fyEnd','f_dateNotified','f_dateSigned','f_datePaid','f_assistantName','f_note'].forEach(id=>F(id).value='');
@@ -1162,7 +1200,7 @@ function resetForm(){
   commManual=false;
   F('f_inSystem').checked=false;F('f_paid').checked=false;F('f_signedFlag').checked=false;
   Object.keys(DOCS).forEach(k=>F('f_doc_'+k).value='no');
-  F('f_dateNotified').value=todayBE();whtTouched=false;F('splitRow').style.display='none';
+  setDF('f_dateNotified',todayBE());whtTouched=false;F('splitRow').style.display='none';
   fillDatalists();fillPrevList();updNet();
 }
 function editRec(id){
@@ -1171,13 +1209,13 @@ function editRec(id){
   document.getElementById('formTitle').textContent='แก้ไข: '+r.company;
   F('f_id').value=r.id;F('f_company').value=r.company;F('f_taxId').value=r.taxId||'';F('f_year').value=r.year;
   F('f_auditor').value=r.auditor||'Poom';F('f_contact').value=r.contact||'';F('f_month').value=r.month||'';
-  F('f_fyEnd').value=parseDateBE(r.fyEnd);F('f_dateNotified').value=parseDateBE(r.dateNotified);F('f_dateSigned').value=parseDateBE(r.dateSigned);
+  setDF('f_fyEnd',r.fyEnd);setDF('f_dateNotified',r.dateNotified);setDF('f_dateSigned',r.dateSigned);
   F('f_opinion').value=r.opinion||'';F('f_revenue').value=r.revenue||'';F('f_inSystem').checked=!!r.inSystem;F('f_signedFlag').checked=!!r.signedFlag;
   F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;F('f_wht').value=r.wht||0;
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
   F('f_commPct').value=r.commissionPct||0;F('f_commAmt').value=r.commission||0;commManual=!(r.commissionPct>0)&&(r.commission>0);
   F('f_poomShare').value=r.poomShare||0;F('f_auditorShare').value=r.auditorShare||0;
-  F('f_paid').checked=!!r.paid;F('f_datePaid').value=parseDateBE(r.datePaid);
+  F('f_paid').checked=!!r.paid;setDF('f_datePaid',r.datePaid);
   Object.keys(DOCS).forEach(k=>F('f_doc_'+k).value=docVal(r,k));
   F('f_note').value=r.note||'';
   /* WHT: ถ้ายังเป็น 0/ตรงกับ 3%-ที่ควรเป็น → ให้คิดอัตโนมัติตามสถานะเข้าระบบ, ถ้าใส่ค่าเองไว้แล้ว → คงไว้ */
@@ -1194,13 +1232,13 @@ function saveForm(){
   Object.assign(rec,{
     year:+F('f_year').value||curYear,company,taxId:F('f_taxId').value.trim(),
     auditor:F('f_auditor').value.trim()||'Poom',contact:F('f_contact').value.trim(),
-    month:+F('f_month').value||null,fyEnd:F('f_fyEnd').value,dateNotified:F('f_dateNotified').value,
-    dateSigned:F('f_dateSigned').value,signedFlag:F('f_signedFlag').checked,opinion:F('f_opinion').value,revenue:F('f_revenue').value,inSystem:F('f_inSystem').checked,
+    month:+F('f_month').value||null,fyEnd:getDF('f_fyEnd'),dateNotified:getDF('f_dateNotified'),
+    dateSigned:getDF('f_dateSigned'),signedFlag:F('f_signedFlag').checked,opinion:F('f_opinion').value,revenue:F('f_revenue').value,inSystem:F('f_inSystem').checked,
     fee:+F('f_fee').value||0,incentive:+F('f_incentive').value||0,wht:+F('f_wht').value||0,
     assistantFee:+F('f_assistantFee').value||0,assistantName:F('f_assistantName').value.trim(),
     commission:+F('f_commAmt').value||0,commissionPct:+F('f_commPct').value||0,
     poomShare:+F('f_poomShare').value||0,auditorShare:+F('f_auditorShare').value||0,
-    paid:F('f_paid').checked,datePaid:F('f_datePaid').value,
+    paid:F('f_paid').checked,datePaid:getDF('f_datePaid'),
     docs:Object.fromEntries(Object.keys(DOCS).map(k=>{const v=F('f_doc_'+k).value;return [k,v==='yes'?true:v==='na'?null:false];})),
     note:F('f_note').value.trim(),
     updatedAt:Date.now(),
