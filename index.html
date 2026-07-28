@@ -345,6 +345,10 @@ th.st .ar{font-size:9px;opacity:.9}
       </select></div>
     </div>
     <div class="frow half">
+      <div><label>ประเภทงบ *</label><select id="f_stmtType"><option value="op">งบดำเนินกิจการ</option><option value="liq">งบเลิกกิจการ</option></select></div>
+      <div style="display:flex;align-items:flex-end"><span style="font-size:11.5px;color:var(--muted);line-height:1.45">💡 “งบเลิกกิจการ” จะไม่ถูกดึงไปหน้า <b>จองชื่อ</b> ใน CRM · ระบบเดาให้จากวันสิ้นงวด (ถ้าไม่ใช่สิ้นเดือน = มักเป็นงบเลิกกิจการ)</span></div>
+    </div>
+    <div class="frow half">
       <div class="ck"><input type="checkbox" id="f_inSystem"><span>เข้าระบบ (ยื่นภาษี)</span></div>
       <div class="ck"><input type="checkbox" id="f_signedFlag"><span>ลงชื่อแล้ว (ไม่ระบุวันที่)</span></div>
     </div>
@@ -499,6 +503,11 @@ function parseDateBE(v){
 }
 /* Export/แสดงเป็น DD/MM/พ.ศ. เช่น 31/12/2569 */
 function fmtDMY(v){const iso=parseDateBE(v);if(!iso)return'';const[y,mo,d]=iso.split('-');return d+'/'+mo+'/'+y;}
+/* ประเภทงบ: op=งบดำเนินกิจการ, liq=งบเลิกกิจการ */
+const STMT={op:'งบดำเนินกิจการ',liq:'งบเลิกกิจการ'};
+function isMonthEnd(v){const iso=parseDateBE(v);const m=iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return true;const y=+m[1]-543,mo=+m[2],d=+m[3];return d===new Date(y,mo,0).getDate();}
+/* เดาประเภทงบ: ถ้าตั้งไว้แล้วใช้ค่านั้น, ไม่งั้นวันสิ้นงวดไม่ใช่สิ้นเดือน = งบเลิกกิจการ */
+function guessStmt(r){if(r.stmtType==='op'||r.stmtType==='liq')return r.stmtType;return (r.fyEnd&&!isMonthEnd(r.fyEnd))?'liq':'op';}
 const net=r=>(r.fee||0)+(r.incentive||0)-(r.wht||0);
 /* สุทธิของเรา = ส่วนของ Poom (กรณีส่งต่อ) หรือรับสุทธิ แล้วหักค่าจ้างผู้ช่วย */
 const poomNet=r=>((r.poomShare||r.auditorShare)?(r.poomShare||0):net(r))-(r.assistantFee||0)-(r.commission||0);
@@ -975,6 +984,7 @@ function renderList(){
         ${r.opinion?`<span class="badge b-amber">⚠️ ${esc(r.opinion)}</span>`:''}
         ${r.revenue?`<span class="badge b-gray">📈 ${esc(r.revenue)}</span>`:''}
         ${r.inSystem?'<span class="badge b-blue">เข้าระบบ</span>':''}
+        ${guessStmt(r)==='liq'?'<span class="badge b-red">🚫 งบเลิกกิจการ</span>':''}
       </div>
       <div class="dts">แจ้ง ${fmtD(r.dateNotified)} · งบปี ${fmtD(r.fyEnd)}${r.datePaid?' · รับเงิน '+fmtD(r.datePaid):''}${r.incentive?' · Incentive '+fmtB(r.incentive):''}${r.assistantFee?' · ผู้ช่วย '+fmtB(r.assistantFee)+(r.assistantName?' ('+esc(r.assistantName)+')':''):''}${r.commission?' · ค่า ref '+fmtB(r.commission)+(r.commissionPct?' ('+r.commissionPct+'%)':''):''}${r.auditorShare?' · แบ่งผู้สอบ '+fmtB(r.auditorShare)+' / เรา '+fmtB(r.poomShare||0):''}${r.note?' · '+esc(r.note):''}</div>
       <div class="docs">${docs}</div>
@@ -1067,7 +1077,10 @@ const DFIELDS=['f_fyEnd','f_dateNotified','f_dateSigned','f_datePaid'];
 function setDF(id,iso){const v=parseDateBE(iso);F(id).value=v?fmtDMY(v):'';}
 function getDF(id){return parseDateBE(F(id).value);}
 function openPick(id){const p=F(id+'_p');if(!p)return;const iso=getDF(id);p.value=iso?((+iso.slice(0,4)-543)+iso.slice(4)):'';try{if(p.showPicker)p.showPicker();else{p.focus();p.click();}}catch(e){p.focus();}}
-DFIELDS.forEach(id=>{const p=F(id+'_p');if(p)p.addEventListener('change',()=>{if(p.value){const[y,mo,d]=p.value.split('-');F(id).value=d+'/'+mo+'/'+(+y+543);}});});
+DFIELDS.forEach(id=>{const p=F(id+'_p');if(p)p.addEventListener('change',()=>{if(p.value){const[y,mo,d]=p.value.split('-');F(id).value=d+'/'+mo+'/'+(+y+543);}if(id==='f_fyEnd')autoStmt();});});
+/* ประเภทงบ: เดาจากวันสิ้นงวด (ไม่ใช่สิ้นเดือน=เลิกกิจการ) จนกว่าผู้ใช้จะเลือกเอง */
+let stmtTouched=false;
+function autoStmt(){if(!stmtTouched){const iso=getDF('f_fyEnd');F('f_stmtType').value=(iso&&!isMonthEnd(iso))?'liq':'op';}}
 ['f_fee','f_incentive','f_wht','f_assistantFee'].forEach(id=>F(id).addEventListener('input',updNet));
 /* หัก ณ ที่จ่าย 3% — คิดให้เฉพาะรายที่ "เข้าระบบ (ยื่นภาษี)" เท่านั้น ถ้าไม่เข้าระบบ = 0 */
 function autoWht(){F('f_wht').value=(F('f_inSystem').checked&&(+F('f_fee').value||0)>0)?Math.round((+F('f_fee').value||0)*0.03*100)/100:0;}
@@ -1081,6 +1094,8 @@ F('f_commPct').addEventListener('input',()=>{commManual=false;commFromPct();updN
 F('f_commAmt').addEventListener('input',()=>{commManual=true;F('f_commPct').value=0;updNet();});
 F('f_auditor').addEventListener('input',()=>{F('splitRow').style.display=(F('f_auditor').value.trim()&&F('f_auditor').value.trim().toLowerCase()!=='poom')?'grid':'none';});
 F('f_paid').addEventListener('change',()=>{if(F('f_paid').checked&&!F('f_datePaid').value)setDF('f_datePaid',todayBE());});
+F('f_fyEnd').addEventListener('input',autoStmt);
+F('f_stmtType').addEventListener('change',()=>{stmtTouched=true;});
 function updNet(){const n=(+F('f_fee').value||0)+(+F('f_incentive').value||0)-(+F('f_wht').value||0);
   const assist=+F('f_assistantFee').value||0,comm=+F('f_commAmt').value||0;
   let t='รับสุทธิ: '+fmtB(n);
@@ -1159,7 +1174,7 @@ function prefillFromId(id){
   F('f_company').value=r.company;F('f_taxId').value=r.taxId||'';
   F('f_year').value=r.year+1;
   F('f_auditor').value=r.auditor||'Poom';F('f_contact').value=r.contact||'';
-  F('f_month').value=r.month||'';setDF('f_fyEnd',shiftYearBE(r.fyEnd));
+  F('f_month').value=r.month||'';setDF('f_fyEnd',shiftYearBE(r.fyEnd));stmtTouched=false;autoStmt();
   F('f_revenue').value=r.revenue||'';F('f_inSystem').checked=!!r.inSystem;
   F('f_fee').value=r.fee||0;F('f_incentive').value=r.incentive||0;whtTouched=false;autoWht(); // คิด WHT ใหม่ตามราคา+สถานะเข้าระบบที่ยกมา
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
@@ -1201,7 +1216,7 @@ function resetForm(){
   F('f_year').value=curYear||new Date().getFullYear()+543;
   F('f_month').value='';F('f_opinion').value='';F('f_revenue').value='';
   ['f_fee','f_incentive','f_wht','f_assistantFee','f_poomShare','f_auditorShare','f_commPct','f_commAmt'].forEach(id=>F(id).value=0);
-  commManual=false;
+  commManual=false;F('f_stmtType').value='op';stmtTouched=false;
   F('f_inSystem').checked=false;F('f_paid').checked=false;F('f_signedFlag').checked=false;
   Object.keys(DOCS).forEach(k=>F('f_doc_'+k).value='no');
   setDF('f_dateNotified',todayBE());whtTouched=false;F('splitRow').style.display='none';
@@ -1219,6 +1234,7 @@ function editRec(id){
   F('f_assistantFee').value=r.assistantFee||0;F('f_assistantName').value=r.assistantName||'';
   F('f_commPct').value=r.commissionPct||0;F('f_commAmt').value=r.commission||0;commManual=!(r.commissionPct>0)&&(r.commission>0);
   F('f_poomShare').value=r.poomShare||0;F('f_auditorShare').value=r.auditorShare||0;
+  F('f_stmtType').value=guessStmt(r);stmtTouched=true;
   F('f_paid').checked=!!r.paid;setDF('f_datePaid',r.datePaid);
   Object.keys(DOCS).forEach(k=>F('f_doc_'+k).value=docVal(r,k));
   F('f_note').value=r.note||'';
@@ -1237,7 +1253,7 @@ function saveForm(){
     year:+F('f_year').value||curYear,company,taxId:F('f_taxId').value.trim(),
     auditor:F('f_auditor').value.trim()||'Poom',contact:F('f_contact').value.trim(),
     month:+F('f_month').value||null,fyEnd:getDF('f_fyEnd'),dateNotified:getDF('f_dateNotified'),
-    dateSigned:getDF('f_dateSigned'),signedFlag:F('f_signedFlag').checked,opinion:F('f_opinion').value,revenue:F('f_revenue').value,inSystem:F('f_inSystem').checked,
+    dateSigned:getDF('f_dateSigned'),signedFlag:F('f_signedFlag').checked,opinion:F('f_opinion').value,revenue:F('f_revenue').value,stmtType:F('f_stmtType').value,inSystem:F('f_inSystem').checked,
     fee:+F('f_fee').value||0,incentive:+F('f_incentive').value||0,wht:+F('f_wht').value||0,
     assistantFee:+F('f_assistantFee').value||0,assistantName:F('f_assistantName').value.trim(),
     commission:+F('f_commAmt').value||0,commissionPct:+F('f_commPct').value||0,
@@ -1276,11 +1292,11 @@ function exportExcel(){
   const yn=v=>v?'Yes':'No';
   const hdr=['No.','วันที่แจ้ง','วันที่ลงรายชื่อ','Remark','Month','เลขนิติบุคคล','กิจการ','Auditor','Contact ลูกค้า','งบปี',
     'เข้าระบบ','รายได้ของงบ','ราคา','Incentive','หัก ณ ที่จ่าย','จ้างผู้ช่วย','ชื่อผู้ช่วย','รับสุทธิ','รับเงินแล้ว','วันที่รับเงิน',
-    'ค้างรับ','Poom รับ','ผู้สอบอื่นรับ','ส่ง Hard','ได้รับ EL and Rep Letter','ได้รับ confirm signed','ได้รับใบหัก ณ ที่จ่าย','ได้รับหนังสือยืนยันผถหไทย','หมายเหตุ','ค่า ref ลูกค้า'];
+    'ค้างรับ','Poom รับ','ผู้สอบอื่นรับ','ส่ง Hard','ได้รับ EL and Rep Letter','ได้รับ confirm signed','ได้รับใบหัก ณ ที่จ่าย','ได้รับหนังสือยืนยันผถหไทย','หมายเหตุ','ค่า ref ลูกค้า','ประเภทงบ'];
   const dv=(r,k)=>({yes:'Yes',no:'No',na:''})[docVal(r,k)];
   const rows=rs.map((r,i)=>[i+1,fmtDMY(r.dateNotified),fmtDMY(r.dateSigned)||(r.signedFlag?'Y':''),r.opinion,r.month||'',r.taxId,r.company,r.auditor,r.contact,fmtDMY(r.fyEnd),
     yn(r.inSystem),r.revenue||'',r.fee||0,r.incentive||0,r.wht||0,r.assistantFee||0,r.assistantName,0,yn(r.paid),fmtDMY(r.datePaid),
-    0,r.poomShare||'',r.auditorShare||'',dv(r,'hard'),dv(r,'elRep'),dv(r,'confirm'),dv(r,'whtCert'),dv(r,'shLetter'),r.note,r.commission||0]);
+    0,r.poomShare||'',r.auditorShare||'',dv(r,'hard'),dv(r,'elRep'),dv(r,'confirm'),dv(r,'whtCert'),dv(r,'shLetter'),r.note,r.commission||0,STMT[guessStmt(r)]]);
   const totalRow=Array(hdr.length).fill('');totalRow[6]='รวม '+rs.length+' งบ';
   const ws=XLSX.utils.aoa_to_sheet([hdr,...rows,totalRow]);
   const lastRow=rows.length+1;                       // แถวข้อมูลสุดท้าย (sheet 1-based)
@@ -1289,7 +1305,7 @@ function exportExcel(){
     ws[XLSX.utils.encode_cell({r:i+1,c:20})]={t:'n',f:`IF(S${n}="Yes",0,R${n})`};});
   [12,13,14,15,17,20].forEach(c=>{const L=XLSX.utils.encode_col(c);
     ws[XLSX.utils.encode_cell({r:lastRow,c})]={t:'n',f:`SUM(${L}2:${L}${lastRow})`};});
-  ws['!cols']=[{wch:5},{wch:11},{wch:11},{wch:12},{wch:6},{wch:15},{wch:42},{wch:10},{wch:14},{wch:11},{wch:8},{wch:14},{wch:10},{wch:9},{wch:11},{wch:10},{wch:12},{wch:10},{wch:9},{wch:11},{wch:10},{wch:10},{wch:11},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:20},{wch:12}];
+  ws['!cols']=[{wch:5},{wch:11},{wch:11},{wch:12},{wch:6},{wch:15},{wch:42},{wch:10},{wch:14},{wch:11},{wch:8},{wch:14},{wch:10},{wch:9},{wch:11},{wch:10},{wch:12},{wch:10},{wch:9},{wch:11},{wch:10},{wch:10},{wch:11},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:20},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,String(curYear));
   XLSX.writeFile(wb,'Audit '+curYear+' export.xlsx');toast('📤 Export แล้ว '+rs.length+' รายการ (มีสูตร)');
@@ -1406,6 +1422,7 @@ function importWB(wb,fname){
         whtCert:tri(gx(row,'ได้รับใบหักณที่จ่าย')),shLetter:tri(gx(row,'ได้รับหนังสือยืนยันผถหไทย(น้องปูน)','ได้รับหนังสือยืนยันผถหไทย'))};})(),
       opinion:String(gx(row,'Remark')||'').trim(),note:rec.note||'',revenue:rec.revenue||'',
       commission:num(gx(row,'ค่า ref ลูกค้า','ค่า ref'))||rec.commission||0,commissionPct:rec.commissionPct||0,
+      stmtType:(s=>/เลิก/.test(s)?'liq':/ดำเนิน/.test(s)?'op':(rec.stmtType||''))(String(gx(row,'ประเภทงบ')||'')),
       poomShare:rec.poomShare||0,auditorShare:rec.auditorShare||0,
       deleted:false,updatedAt:Date.now(),
     });
