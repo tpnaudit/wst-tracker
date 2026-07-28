@@ -1368,6 +1368,13 @@ function importWB(wb,fname){
   const hdr=aoa[hi].map(h=>String(h||'').replace(/\s+/g,''));
   const ix=name=>hdr.findIndex(h=>h===name.replace(/\s+/g,''));
   const gx=(row,...names)=>{for(const n of names){const i=ix(n);if(i>=0&&row[i]!=null&&row[i]!=='')return row[i];}return '';};
+  const has=(...names)=>names.some(n=>ix(n)>=0);
+  /* กันพลาด: ไฟล์ Export รายการ (ส่งลูกค้า) มีคอลัมน์ไม่ครบ (ไม่มี "วันที่แจ้ง") — import แบบเต็มจะลบข้อมูลหาย */
+  if(!has('วันที่แจ้ง')){
+    toast('⚠️ ไฟล์นี้ไม่ใช่ไฟล์ Import เต็ม');
+    alert('❌ หยุดการนำเข้า — ไฟล์นี้ดูเหมือน “Export รายการงบ (สำหรับส่งลูกค้า)” ซึ่งมีคอลัมน์ไม่ครบ (ไม่มีคอลัมน์ วันที่แจ้ง/รับเงิน/เข้าระบบ/ผู้ช่วย)\n\nถ้า import แบบเต็มด้วยไฟล์นี้ ข้อมูลเหล่านั้นจะหาย!\n\n• ต้องการเติมเลขนิติบุคคล → ใช้ปุ่ม “Import เลขนิติบุคคล (เติมอย่างเดียว)”\n• ต้องการ import เต็ม → ใช้ไฟล์ที่ Export จากหน้าข้อมูล (Audit 25xx export.xlsx) ที่มีคอลัมน์ครบ');
+    return;
+  }
   const dt=parseDateBE; // ตัวแยกวันที่รวม (ISO พ.ศ./ค.ศ., d/m/y, m/d/y โดยแยกด้วยเลข >12)
   const num=v=>{const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;};
   const yes=v=>/^(yes|y|ใช่)$/i.test(String(v||'').trim());
@@ -1379,7 +1386,9 @@ function importWB(wb,fname){
     let rec=records.find(x=>x.year===yr&&((taxId&&x.taxId===taxId)||x.company===company));
     const isNew=!rec;
     if(isNew){rec={id:'i'+yr+'-'+r+'-'+Date.now()%100000};records.push(rec);}
-    const unpaidV=gx(row,'ยังไม่ได้รับเงิน');const dp=dt(gx(row,'วันที่รับเงิน'));const fee=num(gx(row,'ราคา'));const inSys=yes(gx(row,'เข้าระบบ'));
+    const unpaidV=gx(row,'ยังไม่ได้รับเงิน');const dp=dt(gx(row,'วันที่รับเงิน'));const fee=num(gx(row,'ราคา'));
+    const inSys=has('เข้าระบบ')?yes(gx(row,'เข้าระบบ')):!!rec.inSystem;
+    const hasPay=has('ยังไม่ได้รับเงิน','วันที่รับเงิน'); // ถ้าไฟล์ไม่มีคอลัมน์เงิน → คงสถานะเดิม ไม่ลบ
     Object.assign(rec,{
       year:yr,company,taxId:taxId||rec.taxId||'',
       auditor:String(gx(row,'Auditor')||'Poom').trim()||'Poom',
@@ -1387,10 +1396,10 @@ function importWB(wb,fname){
       dateNotified:dt(gx(row,'วันที่แจ้ง')),dateSigned:dt(gx(row,'วันที่ลงรายชื่อ')),
       signedFlag:!dt(gx(row,'วันที่ลงรายชื่อ'))&&/^y(es)?$/i.test(String(gx(row,'วันที่ลงรายชื่อ')||'').trim()),
       fyEnd:dt(gx(row,'งบปี')),month:Math.round(num(gx(row,'Month')))||null,
-      inSystem:inSys,fee,incentive:num(gx(row,'Incentive')),
-      wht:num(gx(row,'หักณที่จ่าย','หัก ณ ที่จ่าย'))||(inSys&&fee>0?Math.round(fee*0.03*100)/100:0),assistantFee:num(gx(row,'จ้างผู้ช่วย')),
-      assistantName:String(gx(row,'ชื่อผู้ช่วย')||'').trim(),
-      paid:!!dp||(unpaidV!==''&&num(unpaidV)===0&&fee>0),datePaid:dp,
+      inSystem:inSys,fee,incentive:has('Incentive')?num(gx(row,'Incentive')):(rec.incentive||0),
+      wht:num(gx(row,'หักณที่จ่าย','หัก ณ ที่จ่าย'))||(inSys&&fee>0?Math.round(fee*0.03*100)/100:0),assistantFee:has('จ้างผู้ช่วย')?num(gx(row,'จ้างผู้ช่วย')):(rec.assistantFee||0),
+      assistantName:has('ชื่อผู้ช่วย')?String(gx(row,'ชื่อผู้ช่วย')||'').trim():(rec.assistantName||''),
+      paid:hasPay?(!!dp||(unpaidV!==''&&num(unpaidV)===0&&fee>0)):!!rec.paid,datePaid:hasPay?dp:(rec.datePaid||''),
       docs:(()=>{const tri=v=>{const s=String(v||'').trim();if(!s)return null;return /^(yes|y|ใช่)$/i.test(s)?true:false;};
         return {hard:tri(gx(row,'ส่งHard','ส่ง Hard')),elRep:tri(gx(row,'ได้รับELandRepLetterยัง','ได้รับELandRepLetter')),
         confirm:tri(gx(row,'ได้รับconfirmsignedยัง(น้องปูน)','ได้รับconfirmsignedยัง')),
