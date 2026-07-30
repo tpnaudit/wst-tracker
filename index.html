@@ -196,6 +196,11 @@ th.st .ar{font-size:9px;opacity:.9}
   </div>
   <div class="kpis" id="kpis"></div>
 
+  <div id="deadlineBox"></div>
+  <div id="yoyBox"></div>
+  <div id="concBox"></div>
+  <div id="retentionBox"></div>
+
   <h2>งานรายเดือน (ตามวันที่ลงชื่อ)</h2>
   <div class="card"><div class="chartbox"><canvas id="chMonth"></canvas></div></div>
 
@@ -555,6 +560,60 @@ document.getElementById('yearSel').addEventListener('change',e=>{curYear=+e.targ
 /* ================= dashboard ================= */
 let charts={};
 function mkChart(id,cfg){if(typeof Chart==='undefined')return;if(charts[id])charts[id].destroy();charts[id]=new Chart(document.getElementById(id),cfg);}
+/* ===== มุมผู้บริหาร (CEO) ===== */
+const AGM_MONTHS=4; // งบต้องเสร็จก่อนประชุมผู้ถือหุ้น ~4 เดือนหลังสิ้นรอบบัญชี (ประมาณการ)
+function fmtDateD(d){return d.getDate()+' '+THM[d.getMonth()]+' '+String(d.getFullYear()+543).slice(-2);}
+function deadlineOf(fyEnd){const iso=parseDateBE(fyEnd);const m=iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return null;return new Date(+m[1]-543,(+m[2]-1)+AGM_MONTHS,+m[3]);}
+function renderDeadline(rs){
+  const box=document.getElementById('deadlineBox');const today=new Date();today.setHours(0,0,0,0);
+  const un=rs.filter(r=>!isSigned(r)).map(r=>{const dl=deadlineOf(r.fyEnd);return dl?{r,dl,days:Math.round((dl-today)/86400000)}:null;}).filter(Boolean).sort((a,b)=>a.days-b.days);
+  if(!un.length){box.innerHTML='';return;}
+  const over=un.filter(x=>x.days<0),soon=un.filter(x=>x.days>=0&&x.days<=30),later=un.filter(x=>x.days>30);
+  const show=[...over,...soon].slice(0,12);
+  const row=x=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)">
+    <div style="min-width:0"><div style="font-weight:700;font-size:13px">${esc(x.r.company)}</div><div style="font-size:11px;color:var(--muted)">${x.r.contact?esc(x.r.contact)+' · ':''}งบปี ${fmtD(x.r.fyEnd)} · กำหนด ${fmtDateD(x.dl)}</div></div>
+    <div style="white-space:nowrap;font-weight:800;font-size:12.5px;color:${x.days<0?'#c81e1e':'#b45309'}">${x.days<0?'เกิน '+(-x.days)+' วัน':'เหลือ '+x.days+' วัน'}</div></div>`;
+  box.innerHTML=`<div class="card" style="${over.length?'border:1.5px solid #f8b4b4':''}">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+      <h2 style="margin:0">⏰ กำหนดส่ง — งบยังไม่ลงชื่อ</h2>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${over.length?`<span class="badge b-red">เกินกำหนด ${over.length}</span>`:''}${soon.length?`<span class="badge b-amber">≤30 วัน ${soon.length}</span>`:''}<span class="badge b-gray">>30 วัน ${later.length}</span></div></div>
+    ${show.length?show.map(row).join(''):'<div style="color:var(--muted);font-size:13px">ไม่มีงบที่ใกล้/เกินกำหนด 🎉</div>'}
+    ${un.length>show.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:7px">…และอีก ${un.length-show.length} งบ</div>`:''}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">* ประมาณจากวันสิ้นงวด + ${AGM_MONTHS} เดือน (กำหนดประชุมผู้ถือหุ้น)</div></div>`;
+}
+function renderYoY(rs){
+  const box=document.getElementById('yoyBox');const byY={};
+  rs.forEach(r=>{const y=r.year;byY[y]=byY[y]||{n:0,fee:0,net:0};byY[y].n++;byY[y].fee+=r.fee||0;byY[y].net+=poomNet(r);});
+  const years=Object.keys(byY).map(Number).sort((a,b)=>a-b);
+  if(years.length<2){box.innerHTML='';return;}
+  const rows=years.map((y,i)=>{const c=byY[y],prev=i>0?byY[years[i-1]]:null,g=prev&&prev.net?Math.round((c.net-prev.net)/prev.net*100):null;
+    return `<tr><td style="font-weight:700">${y}</td><td class="r">${fmtN(c.n)}</td><td class="r">${fmtB(c.fee)}</td><td class="r">${fmtB(c.net)}</td><td class="r" style="font-weight:700;color:${g==null?'var(--muted)':g>=0?'#046c4e':'#c81e1e'}">${g==null?'-':(g>=0?'▲+':'▼')+g+'%'}</td></tr>`;}).join('');
+  box.innerHTML=`<div class="card"><h2 style="margin:0 0 8px">📈 เทียบปีต่อปี (โต YoY)</h2>
+    <div class="tblwrap"><table style="width:100%;font-size:13px"><thead><tr><th style="text-align:left">ปี</th><th class="r">งบ</th><th class="r">ค่าสอบ</th><th class="r">สุทธิเรา</th><th class="r">โต%</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function renderConc(rs){
+  const box=document.getElementById('concBox');if(!rs.length){box.innerHTML='';return;}
+  const byC={};rs.forEach(r=>{const c=(r.contact||'').trim()||'(ไม่ระบุ)';byC[c]=byC[c]||{n:0,fee:0};byC[c].n++;byC[c].fee+=r.fee||0;});
+  const arr=Object.entries(byC).map(([c,v])=>({c,...v})).sort((a,b)=>b.fee-a.fee);
+  const tot=arr.reduce((s,x)=>s+x.fee,0)||1,topShare=Math.round(arr[0].fee/tot*100);
+  const bar=x=>{const p=Math.round(x.fee/tot*100);return `<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:12.5px;gap:8px"><span style="font-weight:600;min-width:0">${esc(x.c)} <span style="color:var(--muted)">(${fmtN(x.n)} งบ)</span></span><span style="font-weight:800;white-space:nowrap">${p}% · ${fmtB(x.fee)}</span></div><div style="height:7px;background:#eceff3;border-radius:5px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${p}%;background:${p>=40?'#c81e1e':'var(--teal)'}"></div></div></div>`;};
+  box.innerHTML=`<div class="card"><h2 style="margin:0 0 5px">🧩 กระจุกตัวลูกค้า (ปี ${curYear})</h2>
+    <div style="font-size:12px;color:${topShare>=40?'#c81e1e':'var(--muted)'};margin-bottom:9px">${topShare>=40?'⚠️ ':''}พึ่ง “${esc(arr[0].c)}” ${topShare}% ของค่าสอบทั้งปี${topShare>=40?' — เสี่ยงกระจุกตัว ควรกระจายฐานลูกค้า':''}</div>
+    ${arr.slice(0,5).map(bar).join('')}</div>`;
+}
+function renderRetention(rs){
+  const box=document.getElementById('retentionBox'),prevY=curYear-1,prevByCo=new Map();
+  rs.filter(r=>r.year===prevY).forEach(r=>{if(!prevByCo.has(r.company))prevByCo.set(r.company,r);});
+  if(!prevByCo.size){box.innerHTML='';return;}
+  const curCos=new Set(rs.filter(r=>r.year===curYear).map(r=>r.company));
+  const churned=[...prevByCo.entries()].filter(([co])=>!curCos.has(co)).map(([,r])=>r);
+  const retained=prevByCo.size-churned.length,rate=Math.round(retained/prevByCo.size*100),show=churned.slice(0,12);
+  box.innerHTML=`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+    <h2 style="margin:0">🔁 ลูกค้ากลับมา (${prevY}→${curYear})</h2><span class="badge ${rate>=80?'b-green':rate>=60?'b-amber':'b-red'}">คงอยู่ ${rate}%</span></div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:${churned.length?'8':'0'}px">ปี ${prevY} มี ${fmtN(prevByCo.size)} กิจการ · กลับมา ${fmtN(retained)} · ${churned.length?'ยังไม่กลับมา '+fmtN(churned.length)+' ราย ↓ (ควรตามต่อ)':'กลับมาครบ 🎉'}</div>
+    ${show.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px"><div style="min-width:0"><b>${esc(r.company)}</b>${r.contact?' · <span style="color:var(--muted)">'+esc(r.contact)+'</span>':''}</div><div style="white-space:nowrap;color:var(--muted)">ปีก่อน ${fmtB(r.fee||0)}</div></div>`).join('')}
+    ${churned.length>show.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:7px">…และอีก ${churned.length-show.length} ราย</div>`:''}</div>`;
+}
 function renderDash(){
   const all=yearRecs();
   const sel=document.getElementById('dashAuditor');
@@ -586,6 +645,10 @@ function renderDash(){
     <div class="kpi bl"><div class="lb">เฉลี่ยรับสุทธิ/งบ</div><div class="v">${fmtB(rs.length?netTot/rs.length:0)}</div><div class="sub">รับสุทธิรวม ÷ ${fmtN(rs.length)} งบ</div></div>
     <div class="kpi"><div class="lb">เข้าระบบ TFAC</div><div class="v">${fmtN(inTFAC.length)}</div><div class="sub">มีวันแจ้งแล้ว · ${rs.length?Math.round(inTFAC.length/rs.length*100):0}% ของทั้งหมด</div></div>
     <div class="kpi gd"><div class="lb">TFAC · ลงนามแล้ว</div><div class="v">${fmtN(inTFACSigned.length)}</div><div class="sub">${inTFAC.length?Math.round(inTFACSigned.length/inTFAC.length*100):0}% ของที่เข้า TFAC</div></div>`;
+
+  /* ===== มุมผู้บริหาร (CEO) ===== */
+  const rsAll=sel.value?live().filter(r=>(r.auditor||'Poom')===sel.value):live();
+  renderDeadline(rsAll);renderYoY(rsAll);renderConc(rs);renderRetention(rsAll);
 
   /* month chart */
   const sM=Array(12).fill(0),nM=Array(12).fill(0);
