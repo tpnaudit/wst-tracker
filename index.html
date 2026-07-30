@@ -281,9 +281,13 @@ th.st .ar{font-size:9px;opacity:.9}
       </label>
       <span id="selCount" style="font-size:13px;font-weight:700;opacity:.9"></span>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
-      <button onclick="bulkSign()" style="border:none;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;background:#def7ec;color:#046c4e">✍️ ลงชื่อวันนี้</button>
-      <button onclick="bulkPaid()" style="border:none;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;background:#def7ec;color:#046c4e">💰 รับเงินแล้ว</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;align-items:center">
+      <span style="display:inline-flex;gap:5px;align-items:center;background:rgba(255,255,255,.14);border-radius:8px;padding:3px 8px">
+        <span style="font-size:12px;font-weight:700">📅 วันที่</span>
+        <input id="bulkDate" type="text" inputmode="numeric" placeholder="วันนี้" style="width:104px;border:none;border-radius:6px;padding:5px 7px;font-size:12.5px;font-weight:600">
+      </span>
+      <button onclick="bulkSign()" style="border:none;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;background:#def7ec;color:#046c4e">✍️ ลงชื่อ</button>
+      <button onclick="bulkPaid()" style="border:none;border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;background:#def7ec;color:#046c4e">💰 รับเงิน</button>
       <span style="display:inline-flex;gap:4px;align-items:center;background:rgba(255,255,255,.12);border-radius:8px;padding:3px 5px">
         <select id="bulkDocK" style="border:none;border-radius:6px;padding:5px 6px;font-size:12px;font-weight:600"><option value="">📄 เอกสาร...</option></select>
         <select id="bulkDocV" style="border:none;border-radius:6px;padding:5px 6px;font-size:12px;font-weight:600"><option value="yes">✓ ได้รับแล้ว</option><option value="no">✗ ค้าง</option><option value="na">— ไม่ต้องใช้</option></select>
@@ -490,6 +494,11 @@ function parseDateBE(v){
   const s=String(v).trim();
   let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if(m)return beY(+m[1])+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
+  if(/^\d{6}$|^\d{8}$/.test(s)){ // เลขติดกัน วว ดด ปป(ปป) เช่น 311268 หรือ 31122569 (มือถือคีย์แพดตัวเลข)
+    const day=+s.slice(0,2),mon=+s.slice(2,4),ys=s.slice(4);let y=+ys;
+    if(mon>=1&&mon<=12&&day>=1&&day<=31){if(ys.length===2)y+=2500;y=beY(y);return y+'-'+String(mon).padStart(2,'0')+'-'+String(day).padStart(2,'0');}
+    return '';
+  }
   m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
   if(m){let a=+m[1],b=+m[2],y=+m[3],day,mon;const twoDig=m[3].length<=2;
     if(a>12){day=a;mon=b;}          // a>12 → a คือวัน (D/M)
@@ -1010,7 +1019,8 @@ function toggleSelMode(){
   document.getElementById('selModeBtn').textContent=selMode?'✖ ปิด':'☑️ เลือก';
   document.getElementById('selModeBtn').style.background=selMode?'#fde8e8':'#eceff3';
   document.getElementById('selModeBtn').style.color=selMode?'#c81e1e':'var(--navy)';
-  if(selMode)document.getElementById('bulkDocK').innerHTML='<option value="">📄 เอกสาร...</option>'+Object.entries(DOCS).map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
+  if(selMode){document.getElementById('bulkDocK').innerHTML='<option value="">📄 เอกสาร...</option>'+Object.entries(DOCS).map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
+    F('bulkDate').value=fmtDMY(todayBE());}
   renderList();
 }
 function toggleSel(id,on){on?selected.add(id):selected.delete(id);
@@ -1031,18 +1041,21 @@ function updateSelUI(){
 function selRecs(){return [...selected].map(findRec).filter(r=>r&&!r.deleted);}
 function afterBulk(msg){selected.clear();save();renderList();
   const pg=document.querySelector('.page.show').id;if(pg==='pg-dash')renderDash();toast(msg);}
+function bulkDate(){return parseDateBE(F('bulkDate').value)||todayBE();} // ว่าง=วันนี้
 function bulkSign(){
   const rs=selRecs().filter(r=>!isSigned(r));
   if(!rs.length){toast('ไม่มีงบที่ต้องลงชื่อในรายการที่เลือก');return;}
-  if(!confirm('ลงชื่อ '+rs.length+' งบ เป็นวันนี้ ('+fmtD(todayBE())+')?'))return;
-  const now=Date.now();rs.forEach(r=>{r.dateSigned=todayBE();r.signedFlag=false;r.updatedAt=now;});
+  const d=bulkDate();
+  if(!confirm('ลงชื่อ '+rs.length+' งบ วันที่ '+fmtD(d)+'?'))return;
+  const now=Date.now();rs.forEach(r=>{r.dateSigned=d;r.signedFlag=false;r.updatedAt=now;});
   afterBulk('✍️ ลงชื่อ '+rs.length+' งบแล้ว');
 }
 function bulkPaid(){
   const rs=selRecs().filter(r=>!r.paid);
   if(!rs.length){toast('ไม่มีงบที่ค้างรับเงินในรายการที่เลือก');return;}
-  if(!confirm('ทำเครื่องหมายรับเงินแล้ว '+rs.length+' งบ (วันที่ '+fmtD(todayBE())+')?'))return;
-  const now=Date.now();rs.forEach(r=>{r.paid=true;r.datePaid=todayBE();r.updatedAt=now;});
+  const d=bulkDate();
+  if(!confirm('ทำเครื่องหมายรับเงินแล้ว '+rs.length+' งบ วันที่ '+fmtD(d)+'?'))return;
+  const now=Date.now();rs.forEach(r=>{r.paid=true;r.datePaid=d;r.updatedAt=now;});
   afterBulk('💰 รับเงินแล้ว '+rs.length+' งบ');
 }
 function bulkDoc(){
@@ -1077,7 +1090,9 @@ const DFIELDS=['f_fyEnd','f_dateNotified','f_dateSigned','f_datePaid'];
 function setDF(id,iso){const v=parseDateBE(iso);F(id).value=v?fmtDMY(v):'';}
 function getDF(id){return parseDateBE(F(id).value);}
 function openPick(id){const p=F(id+'_p');if(!p)return;const iso=getDF(id);p.value=iso?((+iso.slice(0,4)-543)+iso.slice(4)):'';try{if(p.showPicker)p.showPicker();else{p.focus();p.click();}}catch(e){p.focus();}}
-DFIELDS.forEach(id=>{const p=F(id+'_p');if(p)p.addEventListener('change',()=>{if(p.value){const[y,mo,d]=p.value.split('-');F(id).value=d+'/'+mo+'/'+(+y+543);}if(id==='f_fyEnd')autoStmt();});});
+DFIELDS.forEach(id=>{const p=F(id+'_p');if(p)p.addEventListener('change',()=>{if(p.value){const[y,mo,d]=p.value.split('-');F(id).value=d+'/'+mo+'/'+(+y+543);}if(id==='f_fyEnd')autoStmt();});
+  F(id).addEventListener('blur',()=>{const iso=getDF(id);if(iso)F(id).value=fmtDMY(iso);}); // พิมพ์ 311268 → 31/12/2568
+});
 /* ประเภทงบ: เดาจากวันสิ้นงวด (ไม่ใช่สิ้นเดือน=เลิกกิจการ) จนกว่าผู้ใช้จะเลือกเอง */
 let stmtTouched=false;
 function autoStmt(){if(!stmtTouched){const iso=getDF('f_fyEnd');F('f_stmtType').value=(iso&&!isMonthEnd(iso))?'liq':'op';}}
